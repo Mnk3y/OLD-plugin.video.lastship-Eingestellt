@@ -21,11 +21,13 @@
 import re
 import json
 import urlparse
+import urlresolver
 
 from resources.lib.modules import cache
 from resources.lib.modules import cleantitle
 from resources.lib.modules import client
 from resources.lib.modules import source_utils
+from resources.lib.modules import control
 
 
 class source:
@@ -67,14 +69,28 @@ class source:
             for hoster, url, quality in j:
                 valid, hoster = source_utils.is_host_valid(hoster, hostDict)
                 if not valid: continue
-                sources.append({'source': hoster, 'quality': quality, 'language': 'de', 'url': ('watch/%s' % url), 'direct': False, 'debridonly': False})
+                sources.append({'source': hoster, 'quality': quality, 'language': 'de', 'url': ('out/%s' % url), 'direct': False, 'debridonly': False})
 
             return sources
         except:
             return sources
 
     def resolve(self, url):
-        try: return self.__get_json(url)['fullurl']
+        try:
+            control.sleep(1000)
+
+            url = urlparse.urljoin(self.base_link, url)
+            r = client.request(url)
+            r = re.search('(?<=sitekey\':\s\')(.*?)(?=\')', r).group()
+            sitekey = 'data-sitekey="' + r + '"'
+            token = urlresolver.plugins.lib.captcha_lib.do_captcha(sitekey)
+            token = token['g-recaptcha-response']
+
+            url = url + '?token=%s' % token + '|Referer=' + url
+            r = client.request(url, redirect=False, output='geturl')
+
+            if r is not None and self.base_link not in r:
+                return r
         except: return
 
     def __get_json(self, api_call):
